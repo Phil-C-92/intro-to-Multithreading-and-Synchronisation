@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <algorithm>
+#include <vector>
 
 namespace fs = std::filesystem;
 
@@ -12,9 +13,9 @@ int main(int argc, char* argv[]) {
     int threadCount;
     std::vector<fs::directory_entry>sortedDir;
 
-    std::cout << "Number of arguments passed in: " << argc - 1 << "\n";
-
-    if(argc < 4)
+    std::cout << "Number of arguments passed in: " << argc << "\n";
+//make sure correct number of arguments are passed in
+    if(argc != 4)
         {
             std::cout << "Incorrect arguments passed in. Please try again using\n";
             std::cout << "./mmcopier n source_dir desination_dir \n";
@@ -22,7 +23,7 @@ int main(int argc, char* argv[]) {
 
             return 0;
         }
-
+//convert int from string to int from passed in arguments
     try 
         {
             threadCount = std::stoi(argv[1]);
@@ -36,15 +37,37 @@ int main(int argc, char* argv[]) {
             return 0;
         }
 
-    fs::path sourceDir = fs::absolute(argv[3]);
+//Set up paths to direcotries
+    fs::path sourceDir = fs::absolute(argv[2]);
     fs::path destDir = fs::absolute(argv[3]);
 
-    for(fs::directory_entry file : fs::directory_iterator(sourceDir))
+//populate vector with files
+    for(const fs::directory_entry& file : fs::directory_iterator(sourceDir))
         {
-            sortedDir.push_back(file);
+            std::string fname = file.path().filename().string();
+            if(!fname.empty() && fname[0] != '.')
+                sortedDir.push_back(file);
         }
-
+//sort alphabetically and ensure index 10 is at the back
     std::sort(sortedDir.begin(), sortedDir.end());
+    fs::directory_entry temp = sortedDir[1];
+    sortedDir.erase(sortedDir.begin() + 1);
+    sortedDir.push_back(temp);
+
+//copy required number of files
+    for(int i = 0; i < threadCount; i++)
+        {
+            fs::path originFile = sortedDir[i].path();
+            fs::path destFile = destDir / sortedDir[i].path().filename();
+
+            try {
+                fs::copy_file(originFile, destFile, fs::copy_options::overwrite_existing); 
+                }
+            catch(fs::filesystem_error) 
+                {
+                std::cout << "Error with directory...\n";
+                }
+        }
 
 
     std::cout << "Arg 1: " << argv[0] << "\n";
