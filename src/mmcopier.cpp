@@ -77,9 +77,6 @@ int main(int argc, char* argv[]) {
 //set up paths to direcotries
     fs::path sourceDir = fs::absolute(argv[2]);
     fs::path destDir = fs::absolute(argv[3]);
-    // fs::path* sDir = &sourceDir;
-    // fs::path* dDir = &destDir;
-
 
 //populate vector with files
     for(const fs::directory_entry& file : fs::directory_iterator(sourceDir))
@@ -108,12 +105,15 @@ int main(int argc, char* argv[]) {
             thread_args[i].dDir = destDir / sortedDir[i].path().filename();
 
             success = pthread_create(&threadArrayID[i], NULL, fileReader, &thread_args[i]);
+
+//make sure thread was created successuflly
             if(success)
                 {
                     std::cout << "Failed to create thread number : " << i << "\n";
                 }
         }
 
+//make sure threads finish executing before the end of the program
     for(int i = 0; i < nThreads; i++)
         {
             success = pthread_join(threadArrayID[i], NULL);
@@ -125,9 +125,9 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Thread count : " << nThreads << "\n";
 
+//clear memory
     delete [] thread_args;
     delete [] threadArrayID;
 
     return 0;
-
 }
