@@ -8,3 +8,5 @@ mmcopier: mmcopier.o
 
 %.o: %.cpp
 	g++ -Wall -Werror -std=c++17 -g -O -c $^
+
+

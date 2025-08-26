@@ -3,11 +3,17 @@
 #include <fstream>
 #include <pthread.h>
 
+//g++ -Wall -Werror -std=c++17 -o mscopier mscopier.cpp -lpthread
+
+
 struct thread_args{
 
     int threadID;
-    int* counterIn;
-    int* counterOut;
+    int* full; 
+    int* empty;
+    int* producerIndex; 
+    int* consumerIndex;
+    bool* finishedReading;
     
     std::string* buffer;
 
@@ -15,13 +21,52 @@ struct thread_args{
     std::ofstream* outFS;
 
     pthread_mutex_t* mutex;
-    pthread_cond_t* mutexCondition;
+    pthread_cond_t* notFull;
+    pthread_cond_t* notEmpty;
 
 };
 
 void* read(void* args)
     {
         struct thread_args* myArgs = (struct thread_args *)args;
+
+//lock mutex
+        pthread_mutex_lock(myArgs->mutex);
+        while(*myArgs->full == 20)
+            {
+                pthread_cond_wait(myArgs->notFull, myArgs->mutex);
+            }
+//read the next word or line from the file
+        std::string nextWord;
+        // *myArgs->inFS >> nextWord;
+        // myArgs->buffer[*myArgs->producerIndex] = nextWord;
+
+//check for end of file
+        if (!(*myArgs->inFS >> nextWord)) 
+            {
+                *myArgs->finishedReading = true;
+//wake up all consumer threads
+                pthread_cond_broadcast(myArgs->notEmpty);
+                pthread_mutex_unlock(myArgs->mutex);
+                return NULL;
+            }
+
+        myArgs->buffer[*myArgs->producerIndex] = nextWord;
+        std::cout << "Reader thread id : " << myArgs->threadID << " is printing " << nextWord << "\n";
+
+        
+//increment producer index in buffer keeping it between 0-19
+        *myArgs->producerIndex = (*myArgs->producerIndex +1) % 20;
+
+//update buffer counters
+        *myArgs->full += 1;
+        *myArgs->empty -= 1;
+
+//signal consumer thread
+        pthread_cond_signal(myArgs->notEmpty);
+
+//unlock mutex
+        pthread_mutex_unlock(myArgs->mutex);
 
         return NULL;
     }
@@ -30,21 +75,60 @@ void* write(void* args)
     {
         struct thread_args* myArgs = (struct thread_args *)args;
 
+        pthread_mutex_lock(myArgs->mutex);
+        while(*myArgs->empty <= 0)
+            {
+//check if the file has finished
+                if (*myArgs->finishedReading && *myArgs->full == 0)
+                    {
+                        pthread_mutex_unlock(myArgs->mutex);
+                        return NULL; 
+                    }
+//if file hasnt finished then wait
+                pthread_cond_wait(myArgs->notEmpty, myArgs->mutex);
+            }
+
+        if(myArgs->buffer[*myArgs->consumerIndex][0] != '\0')
+            {
+                std::string word = myArgs->buffer[*myArgs->consumerIndex];
+                std::cout << "Writer thread id : " << myArgs->threadID << " is printing " << myArgs->buffer[*myArgs->consumerIndex] << "\n";
+
+                myArgs->buffer[*myArgs->consumerIndex].clear();
+
+//write word to output file
+                *myArgs->outFS << word << "\n";
+
+//update the consumer index 
+                *myArgs->consumerIndex = (*myArgs->consumerIndex +1) % 20;
+
+//update buffer counters
+                *myArgs->full -= 1;
+                *myArgs->empty += 1;
+
+//signal producer thread
+                pthread_cond_signal(myArgs->notFull);
+            }
+
+//unlock mutex
+            pthread_mutex_unlock(myArgs->mutex);
+
         return NULL;
     }
 
 int main(int argc, char* argv[]) {
 
-    int counterIn = 0, counterOut = 0, nThreads; //this will need to be *2 for reader and writer
-
+    int full = 0, empty = 20, producerIndex = 0, consumerIndex = 0, nThreads, success; //this will need to be *2 for reader and writer
+    bool finRead = false;
     std::ifstream inFS; 
     std::ofstream outFS; 
 
+//create and initialise locks and conditions
     pthread_mutex_t mutex;
-    pthread_cond_t mutexCondition;
-
-    // std::string readFile = argv[2];
-    // std::string writeFile = argv[3];
+    pthread_cond_t nEmpty;
+    pthread_cond_t nFull;
+    pthread_mutex_init(&mutex, NULL);
+    pthread_cond_init(&nEmpty, NULL);
+    pthread_cond_init(&nFull, NULL);
 
     struct thread_args* tStructure;
     pthread_t* tid;
@@ -56,6 +140,7 @@ int main(int argc, char* argv[]) {
             std::cout << "Incorrect arguments passed in. Please try again using\n";
             return EXIT_FAILURE;
         }
+
 //convert int from string to int from passed in arguments
     try 
         {
@@ -66,15 +151,14 @@ int main(int argc, char* argv[]) {
             std::cout << "Incorrect arguments passed in. Please try again using\n";
             return EXIT_FAILURE;
         }
-//assign threadcount argument passed in
-    nThreads = std::stoi(argv[1]);
+//account for read and write threadcount
     nThreads *= 2;
+    std::cout << "NUMBER OF THREADS : " << nThreads << "\n";
 
 //initalise arrays
     tStructure = new thread_args[nThreads];
     tid = new pthread_t[nThreads];
     
-//this will end up needed to be in void* read(void* args)
 //open read file    
     inFS.open(argv[2]);
     if(!inFS.is_open())
@@ -95,13 +179,19 @@ int main(int argc, char* argv[]) {
     for(int i = 0; i < nThreads; i++)
         {
             tStructure[i].threadID = i;
-            tStructure[i].counterIn = &counterIn;
-            tStructure[i].counterOut = &counterOut;
+            tStructure[i].full = &full;
+            tStructure[i].empty = &empty;
+            tStructure[i].producerIndex = &producerIndex;
+            tStructure[i].consumerIndex = &consumerIndex;
             tStructure[i].buffer = buffer;
             tStructure[i].inFS = &inFS;
             tStructure[i].outFS = &outFS;
             tStructure[i].mutex = &mutex;
-            tStructure[i].mutexCondition = &mutexCondition;
+            tStructure[i].notEmpty = &nEmpty;
+            tStructure[i].notFull = &nFull;
+            tStructure[i].finishedReading = &finRead;
+
+
 
             if(i % 2 == 0)
                 {
@@ -113,25 +203,23 @@ int main(int argc, char* argv[]) {
                 }
         }
 
-
-
-
-
-//scan each line of the file 
-    while(std::getline(inFS, line) && count != (nThreads/2))
+    for (int i = 0; i < nThreads; i++) 
         {
-            std::cout << line << "\n";
-            //write each line to the output file
-            outFS << line << "\n";
-            //outFS << "\n";
-            count++;
+            success = pthread_join(tid[i], NULL);
+            if (success)
+                {
+                    std::cout << "ERROR: pthread join failed\n";
+
+                } 
         }
+
+
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&nEmpty);
+    pthread_cond_destroy(&nFull);
 
     inFS.close();
     outFS.close();
-
-    //delete inFS;
-    //delete outFS;
 
     return 0;
 }
