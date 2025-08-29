@@ -5,6 +5,8 @@
 
 //g++ -Wall -Werror -std=c++17 -o mscopier mscopier.cpp -lpthread
 
+//maybe add a condition to producer to wake up all 
+//writers if eof OR last producer thread
 
 struct thread_args{
 
@@ -14,6 +16,7 @@ struct thread_args{
     int* producerIndex; 
     int* consumerIndex;
     bool* finishedReading;
+    int* wordCount;
     
     std::string* buffer;
 
@@ -30,19 +33,22 @@ void* read(void* args)
     {
         struct thread_args* myArgs = (struct thread_args *)args;
 
-//lock mutex
+//make sure the file is empty
+        while(*myArgs->wordCount < 19)
+            {
+
+ //lock mutex           
         pthread_mutex_lock(myArgs->mutex);
         while(*myArgs->full == 20)
             {
+                pthread_cond_broadcast(myArgs->notEmpty);
                 pthread_cond_wait(myArgs->notFull, myArgs->mutex);
             }
 //read the next word or line from the file
         std::string nextWord;
-        // *myArgs->inFS >> nextWord;
-        // myArgs->buffer[*myArgs->producerIndex] = nextWord;
-
+       
 //check for end of file
-        if (!(*myArgs->inFS >> nextWord)) 
+        if (!(std::getline(*myArgs->inFS, nextWord))) 
             {
                 *myArgs->finishedReading = true;
 //wake up all consumer threads
@@ -50,9 +56,9 @@ void* read(void* args)
                 pthread_mutex_unlock(myArgs->mutex);
                 return NULL;
             }
-
+//insert word into buffer
         myArgs->buffer[*myArgs->producerIndex] = nextWord;
-        std::cout << "Reader thread id : " << myArgs->threadID << " is printing " << nextWord << "\n";
+        std::cout << "Reader thread id : " << myArgs->threadID << " is reading " << nextWord << "\n";
 
         
 //increment producer index in buffer keeping it between 0-19
@@ -61,6 +67,7 @@ void* read(void* args)
 //update buffer counters
         *myArgs->full += 1;
         *myArgs->empty -= 1;
+        *myArgs->wordCount += 1;
 
 //signal consumer thread
         pthread_cond_signal(myArgs->notEmpty);
@@ -68,12 +75,18 @@ void* read(void* args)
 //unlock mutex
         pthread_mutex_unlock(myArgs->mutex);
 
+        }
+
         return NULL;
     }
 
 void* write(void* args)
     {
         struct thread_args* myArgs = (struct thread_args *)args;
+
+//check that the file is empty
+        while(*myArgs->full > 0)
+            {
 
         pthread_mutex_lock(myArgs->mutex);
         while(*myArgs->empty <= 0)
@@ -111,13 +124,14 @@ void* write(void* args)
 
 //unlock mutex
             pthread_mutex_unlock(myArgs->mutex);
+        }
 
         return NULL;
     }
 
 int main(int argc, char* argv[]) {
 
-    int full = 0, empty = 20, producerIndex = 0, consumerIndex = 0, nThreads, success; //this will need to be *2 for reader and writer
+    int full = 0, empty = 20, producerIndex = 0, consumerIndex = 0, wordCount = 0, nThreads, success; //this will need to be *2 for reader and writer
     bool finRead = false;
     std::ifstream inFS; 
     std::ofstream outFS; 
@@ -176,7 +190,7 @@ int main(int argc, char* argv[]) {
         }
 
 //populate thread structure and create threads
-    for(int i = 0; i < nThreads; i++)
+    for(int i = 1; i <= nThreads; i++)
         {
             tStructure[i].threadID = i;
             tStructure[i].full = &full;
@@ -190,16 +204,19 @@ int main(int argc, char* argv[]) {
             tStructure[i].notEmpty = &nEmpty;
             tStructure[i].notFull = &nFull;
             tStructure[i].finishedReading = &finRead;
+            tStructure[i].wordCount = &wordCount;
 
 
 
             if(i % 2 == 0)
                 {
-                    pthread_create(&tid[i], NULL, read, &tStructure[i]);
+                    pthread_create(&tid[i], NULL, write, &tStructure[i]);
+                    std::cout << "Writing thread created\n";
                 }
             else
                 {
-                    pthread_create(&tid[i], NULL, write, &tStructure[i]);
+                    pthread_create(&tid[i], NULL, read, &tStructure[i]);
+                    std::cout << "Reading thread created\n";
                 }
         }
 
@@ -223,3 +240,4 @@ int main(int argc, char* argv[]) {
 
     return 0;
 }
+

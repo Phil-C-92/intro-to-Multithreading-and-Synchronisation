@@ -1,11 +1,7 @@
 #include <pthread.h>
 #include <iostream>
 #include <string>
-#include <filesystem>
 #include <fstream>
-#include <algorithm>
-#include <vector>
-#include <sstream>
 
 namespace fs = std::filesystem;
 
@@ -13,30 +9,46 @@ namespace fs = std::filesystem;
 struct mcThread
     {
         int threadID;
-        int index;
-        fs::path sDir;
-        fs::path dDir;
+
+//each thread has its own file so no need for locks
+        std::ifstream inFS;
+        std::ofstream outFS;
+        std::string sourceDir;
+        std::string destDir;
+
     };
 
 //thread function
 void *fileReader(void* args)
     {
         struct mcThread* myArgs = (struct mcThread *)args;
-        //int threadID = myArgs->threadID;
+        std::string line;
+       
+        myArgs->inFS.open(myArgs->sourceDir);
+        myArgs->outFS.open(myArgs->destDir);
 
-        //std::cout << "Thread id : " << threadID << " created and passed into func\n";
-
-        fs::path sDir = myArgs->sDir;
-        fs::path dDir = myArgs->dDir;
-
-         try {
-                fs::copy_file(sDir, dDir, fs::copy_options::overwrite_existing); 
-            }
-        catch(fs::filesystem_error) 
+        if(!myArgs->inFS.is_open())
             {
-            std::cout << "Error with directory...\n";
+                std::cout << "ERROR : unable to open file in\n";
+                std::cout << "thread : " << myArgs->threadID << "\n";
+                return NULL;
             }
 
+        if(!myArgs->outFS.is_open())
+            {
+                std::cout << "ERROR : unable to open  destination file in\n";
+                std::cout << "thread : " << myArgs->threadID << "\n";
+                return NULL;
+            }
+//write to output file until the end of input file
+        while(std::getline(myArgs->inFS, line))
+            {
+                myArgs->outFS << line << "\n";
+            }
+
+        myArgs->inFS.close();
+        myArgs->outFS.close();
+        
         return NULL;
     }
 
@@ -44,7 +56,11 @@ void *fileReader(void* args)
 int main(int argc, char* argv[]) {
 
     int nThreads, success;
-    std::vector<fs::directory_entry>sortedDir;
+   
+    std::string fileName = "/source.txt";
+    std::string sourceDir = "";
+    std::string destDir = "";
+
     struct mcThread* thread_args;
     pthread_t* threadArrayID;
     
@@ -74,24 +90,10 @@ int main(int argc, char* argv[]) {
 //assign threadcount argument passed in
     nThreads = std::stoi(argv[1]);
 
-//set up paths to direcotries
-    fs::path sourceDir = fs::absolute(argv[2]);
-    fs::path destDir = fs::absolute(argv[3]);
-
-//populate vector with files
-    for(const fs::directory_entry& file : fs::directory_iterator(sourceDir))
-        {
-            std::string fname = file.path().filename().string();
-            if(!fname.empty() && fname[0] != '.')
-                sortedDir.push_back(file);
-        }
-
-//sort alphabetically and ensure index 10 is at the back
-    std::sort(sortedDir.begin(), sortedDir.end());
-    fs::directory_entry temp = sortedDir[1];
-    sortedDir.erase(sortedDir.begin() + 1);
-    sortedDir.push_back(temp);
-
+//set up dir variables
+    sourceDir = argv[2];
+    destDir = argv[3];
+    
 //initalise size of the array for thread arguments and ID
     thread_args = new mcThread[nThreads];
     threadArrayID = new pthread_t[nThreads];
@@ -99,10 +101,18 @@ int main(int argc, char* argv[]) {
 //populate the arguments we'll pass in and create thread
     for(int i = 0; i < nThreads; i++)
         {
+            
+            std::string threadFile = fileName;
+            std::string threadSDir = sourceDir;
+            std::string threadDDir = destDir;
+
+            threadFile.insert(7, std::to_string(i+1)); 
+            threadSDir += threadFile;
+            threadDDir += threadFile;
             thread_args[i].threadID = i;
-            thread_args[i].index = i;
-            thread_args[i].sDir = sortedDir[i].path();
-            thread_args[i].dDir = destDir / sortedDir[i].path().filename();
+
+            thread_args[i].sourceDir = threadSDir;
+            thread_args[i].destDir = threadDDir;
 
             success = pthread_create(&threadArrayID[i], NULL, fileReader, &thread_args[i]);
 
@@ -111,6 +121,7 @@ int main(int argc, char* argv[]) {
                 {
                     std::cout << "Failed to create thread number : " << i << "\n";
                 }
+
         }
 
 //make sure threads finish executing before the end of the program
