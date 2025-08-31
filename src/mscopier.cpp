@@ -5,19 +5,13 @@
 
 //g++ -Wall -Werror -std=c++17 -o mscopier mscopier.cpp -lpthread
 
-//maybe add a condition to producer to wake up all 
-//writers if eof OR last producer thread
-
 struct thread_args{
 
     int threadID;
     int* full; 
-    int* empty;
     int* producerIndex; 
     int* consumerIndex;
     bool* finishedReading;
-    int* wordCount;
-    
     std::string* buffer;
 
     std::ifstream* inFS;
@@ -33,46 +27,42 @@ void* read(void* args)
     {
         struct thread_args* myArgs = (struct thread_args *)args;
 
-//make sure the file is empty
-        while(*myArgs->wordCount < 19)
+        //make sure the file is empty
+        while(!*myArgs->finishedReading)
             {
 
- //lock mutex           
+        //lock mutex           
         pthread_mutex_lock(myArgs->mutex);
         while(*myArgs->full == 20)
             {
                 pthread_cond_broadcast(myArgs->notEmpty);
                 pthread_cond_wait(myArgs->notFull, myArgs->mutex);
             }
-//read the next word or line from the file
+        //read the next word or line from the file
         std::string nextWord;
        
-//check for end of file
+        //check for end of file
         if (!(std::getline(*myArgs->inFS, nextWord))) 
             {
                 *myArgs->finishedReading = true;
-//wake up all consumer threads
+                //wake up all consumer threads
                 pthread_cond_broadcast(myArgs->notEmpty);
                 pthread_mutex_unlock(myArgs->mutex);
                 return NULL;
             }
-//insert word into buffer
+        //insert word into buffer
         myArgs->buffer[*myArgs->producerIndex] = nextWord;
-        std::cout << "Reader thread id : " << myArgs->threadID << " is reading " << nextWord << "\n";
 
-        
-//increment producer index in buffer keeping it between 0-19
+        //increment producer index in buffer keeping it between 0-19
         *myArgs->producerIndex = (*myArgs->producerIndex +1) % 20;
 
-//update buffer counters
+        //update buffer counters
         *myArgs->full += 1;
-        *myArgs->empty -= 1;
-        *myArgs->wordCount += 1;
 
-//signal consumer thread
+        //signal consumer thread
         pthread_cond_signal(myArgs->notEmpty);
 
-//unlock mutex
+        //unlock mutex
         pthread_mutex_unlock(myArgs->mutex);
 
         }
@@ -84,45 +74,47 @@ void* write(void* args)
     {
         struct thread_args* myArgs = (struct thread_args *)args;
 
-//check that the file is empty
-        while(*myArgs->full > 0)
+        //check that the file is empty
+        while(!*myArgs->finishedReading || *myArgs->full > 0)
             {
 
         pthread_mutex_lock(myArgs->mutex);
-        while(*myArgs->empty <= 0)
+        //check if there is 0 empty slots meaning buffer is full
+        while(*myArgs->full == 0)
             {
-//check if the file has finished
+                //check if the file has finished
                 if (*myArgs->finishedReading && *myArgs->full == 0)
                     {
+                        pthread_cond_broadcast(myArgs->notEmpty);
                         pthread_mutex_unlock(myArgs->mutex);
                         return NULL; 
                     }
-//if file hasnt finished then wait
+                //if file hasnt finished then wait
                 pthread_cond_wait(myArgs->notEmpty, myArgs->mutex);
             }
 
         if(myArgs->buffer[*myArgs->consumerIndex][0] != '\0')
             {
+                //read the next word from the buffer
                 std::string word = myArgs->buffer[*myArgs->consumerIndex];
-                std::cout << "Writer thread id : " << myArgs->threadID << " is printing " << myArgs->buffer[*myArgs->consumerIndex] << "\n";
 
+                //delete word from buffer
                 myArgs->buffer[*myArgs->consumerIndex].clear();
 
-//write word to output file
+                //write word to output file
                 *myArgs->outFS << word << "\n";
 
-//update the consumer index 
+                //update the consumer index 
                 *myArgs->consumerIndex = (*myArgs->consumerIndex +1) % 20;
 
-//update buffer counters
+                //update buffer counters
                 *myArgs->full -= 1;
-                *myArgs->empty += 1;
 
-//signal producer thread
+                //signal producer thread
                 pthread_cond_signal(myArgs->notFull);
             }
 
-//unlock mutex
+            //unlock mutex
             pthread_mutex_unlock(myArgs->mutex);
         }
 
@@ -131,12 +123,12 @@ void* write(void* args)
 
 int main(int argc, char* argv[]) {
 
-    int full = 0, empty = 20, producerIndex = 0, consumerIndex = 0, wordCount = 0, nThreads, success; //this will need to be *2 for reader and writer
+    int full = 0, producerIndex = 0, consumerIndex = 0, nThreads, success; 
     bool finRead = false;
     std::ifstream inFS; 
     std::ofstream outFS; 
 
-//create and initialise locks and conditions
+    //create and initialise locks and conditions
     pthread_mutex_t mutex;
     pthread_cond_t nEmpty;
     pthread_cond_t nFull;
@@ -148,32 +140,31 @@ int main(int argc, char* argv[]) {
     pthread_t* tid;
     std::string* buffer = new std::string[20];
 
-//make sure correct number of arguments are passed in
+    //make sure correct number of arguments are passed in
     if(argc != 4)
         {
-            std::cout << "Incorrect arguments passed in. Please try again using\n";
+            std::cout << "Incorrect arguments passed in. Please try again\n";
             return EXIT_FAILURE;
         }
 
-//convert int from string to int from passed in arguments
+    //convert int from string to int from passed in arguments
     try 
         {
             nThreads = std::stoi(argv[1]);
         }
     catch (std::invalid_argument)
         {
-            std::cout << "Incorrect arguments passed in. Please try again using\n";
+            std::cout << "Incorrect arguments passed in. Please try again.\n";
             return EXIT_FAILURE;
         }
-//account for read and write threadcount
+    //account for read and write threadcount
     nThreads *= 2;
-    std::cout << "NUMBER OF THREADS : " << nThreads << "\n";
 
-//initalise arrays
+    //initalise arrays
     tStructure = new thread_args[nThreads];
     tid = new pthread_t[nThreads];
     
-//open read file    
+    //open read file    
     inFS.open(argv[2]);
     if(!inFS.is_open())
         {
@@ -181,7 +172,7 @@ int main(int argc, char* argv[]) {
             return EXIT_FAILURE;
         }
 
-//open write file
+    //open write file
     outFS.open(argv[3]);
     if(!outFS.is_open())
         {
@@ -189,12 +180,11 @@ int main(int argc, char* argv[]) {
             return EXIT_FAILURE;
         }
 
-//populate thread structure and create threads
-    for(int i = 1; i <= nThreads; i++)
+    //populate thread structure and create threads
+    for(int i = 0; i < nThreads; i++)
         {
             tStructure[i].threadID = i;
             tStructure[i].full = &full;
-            tStructure[i].empty = &empty;
             tStructure[i].producerIndex = &producerIndex;
             tStructure[i].consumerIndex = &consumerIndex;
             tStructure[i].buffer = buffer;
@@ -204,19 +194,14 @@ int main(int argc, char* argv[]) {
             tStructure[i].notEmpty = &nEmpty;
             tStructure[i].notFull = &nFull;
             tStructure[i].finishedReading = &finRead;
-            tStructure[i].wordCount = &wordCount;
 
-
-
-            if(i % 2 == 0)
+            if((i+1) % 2 == 0)
                 {
                     pthread_create(&tid[i], NULL, write, &tStructure[i]);
-                    std::cout << "Writing thread created\n";
                 }
             else
                 {
                     pthread_create(&tid[i], NULL, read, &tStructure[i]);
-                    std::cout << "Reading thread created\n";
                 }
         }
 
@@ -226,18 +211,21 @@ int main(int argc, char* argv[]) {
             if (success)
                 {
                     std::cout << "ERROR: pthread join failed\n";
-
                 } 
         }
 
-
-    pthread_mutex_destroy(&mutex);
-    pthread_cond_destroy(&nEmpty);
-    pthread_cond_destroy(&nFull);
-
+    //close files
     inFS.close();
     outFS.close();
 
-    return 0;
+    //clear memory
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&nEmpty);
+    pthread_cond_destroy(&nFull);
+    delete [] tStructure;
+    delete [] tid;
+    delete [] buffer;
+
+    return EXIT_SUCCESS;
 }
 

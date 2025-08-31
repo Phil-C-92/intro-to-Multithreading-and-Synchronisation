@@ -1,12 +1,18 @@
 # intro-to-Multithreading-and-Synchronisation
-Intro to some basic examples of multithreaded programs and synchronisation
+Intro to some basic examples of multithreaded programs and synchronisation in C++. An example of concurrency is shown with mmcopier; mscopier requires syncronicity utilising mutex locks in order to function correctly. The pthreads library or POSIX threads are used in the programs listed. 
 
 # mmcopier
-This file when compiled with the following command:
+This file when compiled and run with the following command:
 
  ./mmcopier n ../source_dir ../desination_dir  
 
-where n (2 <= n <= 10) is the number of files, which corresponds to the number of threads used, to be copied under source_dir, to the target directory destination_dir.
+where n (2 <= n <= 10) is the number of files, corresponds to the number of threads created and number of files to be copied from "source_dir", to the target directory "destination_dir".
 
-# structure of thread
-Each thread will have a threadID, index, path to source directory and destination directoy. The index is simply which number thread was created
+mmcopier is a rudimentary example of concurrency with each individual thread running at the same time. Each thread is copying all lines from one file into another independently before teminating. 
+
+# mscopier 
+When compiled and run with the following command: 
+
+./mscopier n ../read.txt ../write.txt  
+
+where n (2 <= n <= 10) is the number of threads that will be created for each function - read and write. 

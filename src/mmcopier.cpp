@@ -3,14 +3,12 @@
 #include <string>
 #include <fstream>
 
-namespace fs = std::filesystem;
-
 //structure for each thread
 struct mcThread
     {
         int threadID;
 
-//each thread has its own file so no need for locks
+        //each thread has its own file so no need for locks
         std::ifstream inFS;
         std::ofstream outFS;
         std::string sourceDir;
@@ -23,10 +21,12 @@ void *fileReader(void* args)
     {
         struct mcThread* myArgs = (struct mcThread *)args;
         std::string line;
-       
+
+        //open files     
         myArgs->inFS.open(myArgs->sourceDir);
         myArgs->outFS.open(myArgs->destDir);
 
+        //make sure files open without error
         if(!myArgs->inFS.is_open())
             {
                 std::cout << "ERROR : unable to open file in\n";
@@ -40,12 +40,12 @@ void *fileReader(void* args)
                 std::cout << "thread : " << myArgs->threadID << "\n";
                 return NULL;
             }
-//write to output file until the end of input file
+        //write to output file until the end of input file
         while(std::getline(myArgs->inFS, line))
             {
                 myArgs->outFS << line << "\n";
             }
-
+        //close files
         myArgs->inFS.close();
         myArgs->outFS.close();
         
@@ -64,10 +64,7 @@ int main(int argc, char* argv[]) {
     struct mcThread* thread_args;
     pthread_t* threadArrayID;
     
-
-    std::cout << "Number of arguments passed in: " << argc << "\n";
-
-//make sure correct number of arguments are passed in
+    //make sure correct number of arguments are passed in
     if(argc != 4)
         {
             std::cout << "Incorrect arguments passed in. Please try again using\n";
@@ -75,7 +72,7 @@ int main(int argc, char* argv[]) {
             std::cout << "Where n is >= 2 and <= 10\n";
             return 0;
         }
-//convert int from string to int from passed in arguments
+    //convert int from string to int from passed in arguments
     try 
         {
             nThreads = std::stoi(argv[1]);
@@ -87,44 +84,46 @@ int main(int argc, char* argv[]) {
             std::cout << "Where n is >= 2 and <= 10\n";
             return 0;
         }
-//assign threadcount argument passed in
+    //assign threadcount argument passed in
     nThreads = std::stoi(argv[1]);
 
-//set up dir variables
+    //set up dir variables
     sourceDir = argv[2];
     destDir = argv[3];
     
-//initalise size of the array for thread arguments and ID
+    //initalise size of the array for thread arguments and ID
     thread_args = new mcThread[nThreads];
     threadArrayID = new pthread_t[nThreads];
 
-//populate the arguments we'll pass in and create thread
+    //populate the arguments we'll pass in and create thread
     for(int i = 0; i < nThreads; i++)
         {
-            
+            //set up temp variables to be passed in as source and dest file names/locations            
             std::string threadFile = fileName;
             std::string threadSDir = sourceDir;
             std::string threadDDir = destDir;
 
+            //update file name with each index required
             threadFile.insert(7, std::to_string(i+1)); 
             threadSDir += threadFile;
             threadDDir += threadFile;
-            thread_args[i].threadID = i;
 
+            //populate required thread arguments
+            thread_args[i].threadID = i;
             thread_args[i].sourceDir = threadSDir;
             thread_args[i].destDir = threadDDir;
 
+            //create thread
             success = pthread_create(&threadArrayID[i], NULL, fileReader, &thread_args[i]);
 
-//make sure thread was created successuflly
+            //make sure thread was created successuflly
             if(success)
                 {
                     std::cout << "Failed to create thread number : " << i << "\n";
                 }
-
         }
 
-//make sure threads finish executing before the end of the program
+    //make sure threads finish executing before the end of the program
     for(int i = 0; i < nThreads; i++)
         {
             success = pthread_join(threadArrayID[i], NULL);
@@ -134,9 +133,7 @@ int main(int argc, char* argv[]) {
                 }
         }
 
-    std::cout << "Thread count : " << nThreads << "\n";
-
-//clear memory
+    //clear memory
     delete [] thread_args;
     delete [] threadArrayID;
 

@@ -18,6 +18,8 @@ fi
 
 # Generate the file with n random lines from the dictionary
 # echo "Generated file '$output_file' with $n lines of text."
-shuf -n "$n" "$dictionary" 
+# head -n "$n" "$dictionary" > read_test.txt
+
+sort -R "$n" "$dictionary" > read_test.txt
 
 

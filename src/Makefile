@@ -1,12 +1,16 @@
-all: mmcopier
+all: mmcopier mscopier
 
 clean:
 	rm -f mmcopier *.o 
+	rm -f mscopier *.o
 
 mmcopier: mmcopier.o
-	g++ -Wall -Werror -std=c++17 -g -O -o $@ $^ -lpthread
+	g++ -Wall -Werror -g -O -o $@ $^ -lpthread
+
+mscopier: mscopier.o
+	g++ -Wall -Werror -g -O -o $@ $^ -lpthread
 
 %.o: %.cpp
-	g++ -Wall -Werror -std=c++17 -g -O -c $^
+	g++ -Wall -Werror -g -O -c $^
 
 
