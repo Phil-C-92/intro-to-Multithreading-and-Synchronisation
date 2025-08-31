@@ -197,12 +197,18 @@ int main(int argc, char* argv[]) {
 
             if((i+1) % 2 == 0)
                 {
-                    pthread_create(&tid[i], NULL, write, &tStructure[i]);
+                    success = pthread_create(&tid[i], NULL, write, &tStructure[i]);
                 }
             else
                 {
-                    pthread_create(&tid[i], NULL, read, &tStructure[i]);
+                    success = pthread_create(&tid[i], NULL, read, &tStructure[i]);
                 }
+            //make sure no issues creating threads    
+            if (success)
+                {
+                    std::cout << "ERROR: pthread join failed\n";
+                } 
+            
         }
 
     for (int i = 0; i < nThreads; i++) 
