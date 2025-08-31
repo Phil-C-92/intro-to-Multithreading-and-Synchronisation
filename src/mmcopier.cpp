@@ -2,6 +2,8 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <cstdlib> 
+#include <stdexcept>
 
 //structure for each thread
 struct mcThread
@@ -29,14 +31,14 @@ void *fileReader(void* args)
         //make sure files open without error
         if(!myArgs->inFS.is_open())
             {
-                std::cout << "ERROR : unable to open file in\n";
+                std::cout << "ERROR : unable to open file in : " << myArgs->sourceDir << "\n";
                 std::cout << "thread : " << myArgs->threadID << "\n";
                 return NULL;
             }
 
         if(!myArgs->outFS.is_open())
             {
-                std::cout << "ERROR : unable to open  destination file in\n";
+                std::cout << "ERROR : unable to open  destination direcetory : " << myArgs->destDir << "\n";
                 std::cout << "thread : " << myArgs->threadID << "\n";
                 return NULL;
             }
@@ -63,6 +65,7 @@ int main(int argc, char* argv[]) {
 
     struct mcThread* thread_args;
     pthread_t* threadArrayID;
+
     
     //make sure correct number of arguments are passed in
     if(argc != 4)
@@ -75,17 +78,23 @@ int main(int argc, char* argv[]) {
     //convert int from string to int from passed in arguments
     try 
         {
-            nThreads = std::stoi(argv[1]);
+            nThreads = std::atoi(argv[1]);
         }
-    catch (std::invalid_argument)
+    catch (std::invalid_argument& e)
         {
             std::cout << "Incorrect arguments passed in. Please try again using\n";
             std::cout << "./mmcopier n source_dir desination_dir \n";
             std::cout << "Where n is >= 2 and <= 10\n";
-            return 0;
+            return EXIT_FAILURE;
         }
-    //assign threadcount argument passed in
-    nThreads = std::stoi(argv[1]);
+
+    //check the correct number of threads were entered
+    if(nThreads < 2 || nThreads > 10)
+        {
+            std::cout << "You've entered incorrect number of threads,\n";
+            std::cout << "Please try again with a number between 2 and 10.\n";
+            return EXIT_FAILURE;
+        }
 
     //set up dir variables
     sourceDir = argv[2];
@@ -94,8 +103,28 @@ int main(int argc, char* argv[]) {
     //initalise size of the array for thread arguments and ID
     thread_args = new mcThread[nThreads];
     threadArrayID = new pthread_t[nThreads];
+    
+    //make sure the directories exist
+    std::ifstream outFS;
+    std::ifstream inFS;
+    outFS.open(destDir);
+    if(!outFS.is_open())
+        {
+            std::cout << "ERROR : Destination direcetory either doesnt exist or is not in this location\n";
+            std::cout <<"Please try again\n";
+            return EXIT_FAILURE;
+        }
+    outFS.close();
+    inFS.open(sourceDir);
+    if(!inFS.is_open())
+        {
+            std::cout << "ERROR : Source direcetory either doesnt exist or is not in this location\n";
+            std::cout <<"Please try again\n";
+            return EXIT_FAILURE;
+        }
+    inFS.close();
 
-    //populate the arguments we'll pass in and create thread
+    //populate the arguments we'll pass into the thread
     for(int i = 0; i < nThreads; i++)
         {
             //set up temp variables to be passed in as source and dest file names/locations            
@@ -137,5 +166,5 @@ int main(int argc, char* argv[]) {
     delete [] thread_args;
     delete [] threadArrayID;
 
-    return 0;
+    return EXIT_SUCCESS;
 }

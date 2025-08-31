@@ -3,8 +3,6 @@
 #include <fstream>
 #include <pthread.h>
 
-//g++ -Wall -Werror -std=c++17 -o mscopier mscopier.cpp -lpthread
-
 struct thread_args{
 
     int threadID;
@@ -169,6 +167,7 @@ int main(int argc, char* argv[]) {
     if(!inFS.is_open())
         {
             std::cout << "ERROR opening file : " << argv[2] << "\n";
+            std::cout << "Please try again using ../read.txt\n";
             return EXIT_FAILURE;
         }
 
