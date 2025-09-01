@@ -18,42 +18,7 @@ struct mcThread
 
     };
 
-//thread function
-void *fileReader(void* args)
-    {
-        struct mcThread* myArgs = (struct mcThread *)args;
-        std::string line;
-
-        //open files     
-        myArgs->inFS.open(myArgs->sourceDir);
-        myArgs->outFS.open(myArgs->destDir);
-
-        //make sure files open without error
-        if(!myArgs->inFS.is_open())
-            {
-                std::cout << "ERROR : unable to open file in : " << myArgs->sourceDir << "\n";
-                std::cout << "thread : " << myArgs->threadID << "\n";
-                return NULL;
-            }
-
-        if(!myArgs->outFS.is_open())
-            {
-                std::cout << "ERROR : unable to open  destination direcetory : " << myArgs->destDir << "\n";
-                std::cout << "thread : " << myArgs->threadID << "\n";
-                return NULL;
-            }
-        //write to output file until the end of input file
-        while(std::getline(myArgs->inFS, line))
-            {
-                myArgs->outFS << line << "\n";
-            }
-        //close files
-        myArgs->inFS.close();
-        myArgs->outFS.close();
-        
-        return NULL;
-    }
-
+void *fileReader(void* args);
 
 int main(int argc, char* argv[]) {
 
@@ -168,3 +133,39 @@ int main(int argc, char* argv[]) {
 
     return EXIT_SUCCESS;
 }
+
+//thread function
+void *fileReader(void* args)
+    {
+        struct mcThread* myArgs = (struct mcThread *)args;
+        std::string line;
+
+        //open files     
+        myArgs->inFS.open(myArgs->sourceDir);
+        myArgs->outFS.open(myArgs->destDir);
+
+        //make sure files open without error
+        if(!myArgs->inFS.is_open())
+            {
+                std::cout << "ERROR : unable to open file in : " << myArgs->sourceDir << "\n";
+                std::cout << "thread : " << myArgs->threadID << "\n";
+                return NULL;
+            }
+
+        if(!myArgs->outFS.is_open())
+            {
+                std::cout << "ERROR : unable to open  destination direcetory : " << myArgs->destDir << "\n";
+                std::cout << "thread : " << myArgs->threadID << "\n";
+                return NULL;
+            }
+        //write to output file until the end of input file
+        while(std::getline(myArgs->inFS, line))
+            {
+                myArgs->outFS << line << "\n";
+            }
+        //close files
+        myArgs->inFS.close();
+        myArgs->outFS.close();
+        
+        return NULL;
+    }

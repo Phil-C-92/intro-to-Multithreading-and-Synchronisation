@@ -2,6 +2,8 @@
 #include <string>
 #include <fstream>
 #include <pthread.h>
+#include <cstdlib> 
+#include <stdexcept>
 
 struct thread_args{
 
@@ -21,103 +23,8 @@ struct thread_args{
 
 };
 
-void* read(void* args)
-    {
-        struct thread_args* myArgs = (struct thread_args *)args;
-
-        //make sure the file is empty
-        while(!*myArgs->finishedReading)
-            {
-
-        //lock mutex           
-        pthread_mutex_lock(myArgs->mutex);
-        while(*myArgs->full == 20)
-            {
-                pthread_cond_broadcast(myArgs->notEmpty);
-                pthread_cond_wait(myArgs->notFull, myArgs->mutex);
-            }
-        //read the next word or line from the file
-        std::string nextWord;
-       
-        //check for end of file
-        if (!(std::getline(*myArgs->inFS, nextWord))) 
-            {
-                *myArgs->finishedReading = true;
-                //wake up all consumer threads
-                pthread_cond_broadcast(myArgs->notEmpty);
-                pthread_mutex_unlock(myArgs->mutex);
-                return NULL;
-            }
-        //insert word into buffer
-        myArgs->buffer[*myArgs->producerIndex] = nextWord;
-
-        //increment producer index in buffer keeping it between 0-19
-        *myArgs->producerIndex = (*myArgs->producerIndex +1) % 20;
-
-        //update buffer counters
-        *myArgs->full += 1;
-
-        //signal consumer thread
-        pthread_cond_signal(myArgs->notEmpty);
-
-        //unlock mutex
-        pthread_mutex_unlock(myArgs->mutex);
-
-        }
-
-        return NULL;
-    }
-
-void* write(void* args)
-    {
-        struct thread_args* myArgs = (struct thread_args *)args;
-
-        //check that the file is empty
-        while(!*myArgs->finishedReading || *myArgs->full > 0)
-            {
-
-        pthread_mutex_lock(myArgs->mutex);
-        //check if there is 0 empty slots meaning buffer is full
-        while(*myArgs->full == 0)
-            {
-                //check if the file has finished
-                if (*myArgs->finishedReading && *myArgs->full == 0)
-                    {
-                        pthread_cond_broadcast(myArgs->notEmpty);
-                        pthread_mutex_unlock(myArgs->mutex);
-                        return NULL; 
-                    }
-                //if file hasnt finished then wait
-                pthread_cond_wait(myArgs->notEmpty, myArgs->mutex);
-            }
-
-        if(myArgs->buffer[*myArgs->consumerIndex][0] != '\0')
-            {
-                //read the next word from the buffer
-                std::string word = myArgs->buffer[*myArgs->consumerIndex];
-
-                //delete word from buffer
-                myArgs->buffer[*myArgs->consumerIndex].clear();
-
-                //write word to output file
-                *myArgs->outFS << word << "\n";
-
-                //update the consumer index 
-                *myArgs->consumerIndex = (*myArgs->consumerIndex +1) % 20;
-
-                //update buffer counters
-                *myArgs->full -= 1;
-
-                //signal producer thread
-                pthread_cond_signal(myArgs->notFull);
-            }
-
-            //unlock mutex
-            pthread_mutex_unlock(myArgs->mutex);
-        }
-
-        return NULL;
-    }
+void* read(void* args);
+void* write(void* args);
 
 int main(int argc, char* argv[]) {
 
@@ -148,11 +55,19 @@ int main(int argc, char* argv[]) {
     //convert int from string to int from passed in arguments
     try 
         {
-            nThreads = std::stoi(argv[1]);
+            nThreads = std::atoi(argv[1]);
         }
-    catch (std::invalid_argument)
+    catch (std::invalid_argument& e)
         {
             std::cout << "Incorrect arguments passed in. Please try again.\n";
+            return EXIT_FAILURE;
+        }
+
+    //check the correct number of threads were entered
+    if(nThreads < 2 || nThreads > 10)
+        {
+            std::cout << "You've entered incorrect number of threads,\n";
+            std::cout << "Please try again with a number between 2 and 10.\n";
             return EXIT_FAILURE;
         }
     //account for read and write threadcount
@@ -176,6 +91,7 @@ int main(int argc, char* argv[]) {
     if(!outFS.is_open())
         {
             std::cout << "ERROR opening file : " << argv[3] << "\n";
+            std::cout << "Please try again\n";
             return EXIT_FAILURE;
         }
 
@@ -206,8 +122,7 @@ int main(int argc, char* argv[]) {
             if (success)
                 {
                     std::cout << "ERROR: pthread join failed\n";
-                } 
-            
+                }          
         }
 
     for (int i = 0; i < nThreads; i++) 
@@ -234,3 +149,99 @@ int main(int argc, char* argv[]) {
     return EXIT_SUCCESS;
 }
 
+
+void* read(void* args)
+    {
+        struct thread_args* myArgs = (struct thread_args *)args;
+
+        //make sure the file is empty
+        while(!*myArgs->finishedReading)
+            {
+            //lock mutex           
+            pthread_mutex_lock(myArgs->mutex);
+            while(*myArgs->full == 20)
+                {
+                    pthread_cond_broadcast(myArgs->notEmpty);
+                    pthread_cond_wait(myArgs->notFull, myArgs->mutex);
+                }
+            //read the next word or line from the file
+            std::string nextWord;
+            
+            //check for end of file
+            if (!(std::getline(*myArgs->inFS, nextWord))) 
+                {
+                    *myArgs->finishedReading = true;
+                    //wake up all consumer threads
+                    pthread_cond_broadcast(myArgs->notEmpty);
+                    pthread_mutex_unlock(myArgs->mutex);
+                    return NULL;
+                }
+            //insert word into buffer
+            myArgs->buffer[*myArgs->producerIndex] = nextWord;
+
+            //increment producer index in buffer keeping it between 0-19
+            *myArgs->producerIndex = (*myArgs->producerIndex +1) % 20;
+
+            //update buffer counters
+            *myArgs->full += 1;
+
+            //signal consumer thread
+            pthread_cond_signal(myArgs->notEmpty);
+
+            //unlock mutex
+            pthread_mutex_unlock(myArgs->mutex);
+
+            }
+
+        return NULL;
+    }
+
+void* write(void* args)
+    {
+        struct thread_args* myArgs = (struct thread_args *)args;
+
+        //check that the file is empty
+        while(!*myArgs->finishedReading || *myArgs->full > 0)
+            {
+
+            pthread_mutex_lock(myArgs->mutex);
+            //check if there is 0 empty slots meaning buffer is full
+            while(*myArgs->full == 0)
+                {
+                    //check if the file has finished
+                    if (*myArgs->finishedReading && *myArgs->full == 0)
+                        {
+                            pthread_cond_broadcast(myArgs->notEmpty);
+                            pthread_mutex_unlock(myArgs->mutex);
+                            return NULL; 
+                        }
+                    //if file hasnt finished then wait
+                    pthread_cond_wait(myArgs->notEmpty, myArgs->mutex);
+                }
+
+            if(myArgs->buffer[*myArgs->consumerIndex][0] != '\0')
+                {
+                    //read the next word from the buffer
+                    std::string word = myArgs->buffer[*myArgs->consumerIndex];
+
+                    //delete word from buffer
+                    myArgs->buffer[*myArgs->consumerIndex].clear();
+
+                    //write word to output file
+                    *myArgs->outFS << word << "\n";
+
+                    //update the consumer index 
+                    *myArgs->consumerIndex = (*myArgs->consumerIndex +1) % 20;
+
+                    //update buffer counters
+                    *myArgs->full -= 1;
+
+                    //signal producer thread
+                    pthread_cond_signal(myArgs->notFull);
+                }
+                //unlock mutex
+                pthread_mutex_unlock(myArgs->mutex);
+            }
+
+        return NULL;
+    }
