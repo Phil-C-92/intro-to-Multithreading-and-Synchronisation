@@ -3,7 +3,9 @@
 #include <string>
 #include <fstream>
 #include <cstdlib> 
+#include <cstring>
 #include <stdexcept>
+#include <dirent.h>
 
 //structure for each thread
 struct mcThread
@@ -18,13 +20,48 @@ struct mcThread
 
     };
 
-void *fileReader(void* args);
+//thread function
+void *fileReader(void* args)
+    {
+        struct mcThread* myArgs = (struct mcThread *)args;
+        std::string line;
+
+        //open files     
+        myArgs->inFS.open(myArgs->sourceDir);
+        myArgs->outFS.open(myArgs->destDir);
+
+        //make sure files open without error
+        if(!myArgs->inFS.is_open())
+            {
+                std::cout << "ERROR : unable to open file in : " << myArgs->sourceDir << "\n";
+                std::cout << "thread : " << myArgs->threadID << "\n";
+                return NULL;
+            }
+
+        if(!myArgs->outFS.is_open())
+            {
+                std::cout << "ERROR : unable to open  destination direcetory : " << myArgs->destDir << "\n";
+                std::cout << "thread : " << myArgs->threadID << "\n";
+                return NULL;
+            }
+        //write to output file until the end of input file
+        while(std::getline(myArgs->inFS, line))
+            {
+                myArgs->outFS << line << "\n";
+            }
+        //close files
+        myArgs->inFS.close();
+        myArgs->outFS.close();
+        
+        return NULL;
+    }
+
 
 int main(int argc, char* argv[]) {
 
     int nThreads, success;
    
-    std::string fileName = "/source.txt";
+    std::string fileName = "";
     std::string sourceDir = "";
     std::string destDir = "";
 
@@ -87,9 +124,40 @@ int main(int argc, char* argv[]) {
             std::cout <<"Please try again\n";
             return EXIT_FAILURE;
         }
+    else   
+        {
+            //dynamically find name of the file using dirent.h library
+            DIR* directory;
+            struct dirent* openDirectoryFile;
+            //make sure the dir isnt empty
+            if((directory = opendir(argv[2])) != nullptr)
+                {
+                    //read through the files till I find what I want
+                    while ((openDirectoryFile = readdir (directory)) != nullptr) {
+                        //make sure I'm not using any hidden files 
+                        if(std::strcmp(openDirectoryFile->d_name, ".") != 0 && 
+                           std::strcmp(openDirectoryFile->d_name, "..") != 0)
+                            {
+                                //get a copy of the file name and store it as string
+                                fileName = openDirectoryFile->d_name;
+                                //leave loop
+                                break;
+                            }
+                      }
+                }
+            closedir(directory);
+        }
     inFS.close();
-
-    //populate the arguments we'll pass into the thread
+    //clean up file name to remove numbers
+    if(fileName.length() > 11)
+        {
+            fileName.erase(6, 2);
+        }
+    else
+        {
+            fileName.erase(6,1);
+        }
+    //populate the arguments we'll pass in and create thread
     for(int i = 0; i < nThreads; i++)
         {
             //set up temp variables to be passed in as source and dest file names/locations            
@@ -98,8 +166,10 @@ int main(int argc, char* argv[]) {
             std::string threadDDir = destDir;
 
             //update file name with each index required
-            threadFile.insert(7, std::to_string(i+1)); 
+            threadFile.insert(6, std::to_string(i+1)); 
+            threadSDir += "/";
             threadSDir += threadFile;
+            threadDDir += "/";
             threadDDir += threadFile;
 
             //populate required thread arguments
@@ -133,39 +203,3 @@ int main(int argc, char* argv[]) {
 
     return EXIT_SUCCESS;
 }
-
-//thread function
-void *fileReader(void* args)
-    {
-        struct mcThread* myArgs = (struct mcThread *)args;
-        std::string line;
-
-        //open files     
-        myArgs->inFS.open(myArgs->sourceDir);
-        myArgs->outFS.open(myArgs->destDir);
-
-        //make sure files open without error
-        if(!myArgs->inFS.is_open())
-            {
-                std::cout << "ERROR : unable to open file in : " << myArgs->sourceDir << "\n";
-                std::cout << "thread : " << myArgs->threadID << "\n";
-                return NULL;
-            }
-
-        if(!myArgs->outFS.is_open())
-            {
-                std::cout << "ERROR : unable to open  destination direcetory : " << myArgs->destDir << "\n";
-                std::cout << "thread : " << myArgs->threadID << "\n";
-                return NULL;
-            }
-        //write to output file until the end of input file
-        while(std::getline(myArgs->inFS, line))
-            {
-                myArgs->outFS << line << "\n";
-            }
-        //close files
-        myArgs->inFS.close();
-        myArgs->outFS.close();
-        
-        return NULL;
-    }
